@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<!--
+  TWC Outreach Tracker — Split-architecture PWA shell (GitHub Pages)
+  ====================================================================
+  This is a STANDALONE HTML file (NOT a GAS HtmlService template).
+  It is hosted on GitHub Pages (or any static host) and talks to the
+  GAS JSON API via fetch(). All template/scriptlet tags (<?!= include() ?>)
+  have been stripped.
+
+  ──────────────────────────────────────────────────────────────────────
+  DEPLOYER: edit the <meta name="gas-api-url"> tag below to point at
+  your deployed GAS web app URL (the /exec URL). The client reads this
+  meta tag on boot and routes every fetch() call to it.
+  ──────────────────────────────────────────────────────────────────────
+
+  Author : TWC Labs
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#077187">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TWC Tracker">
+
+  <!-- ====================================================================
+       GAS API URL — DEPLOYER MUST REPLACE THIS VALUE
+       ====================================================================
+       Paste the URL of your deployed Apps Script Web App (the /exec URL,
+       NOT /dev). Example:
+         https://script.google.com/macros/s/AKfycb.../exec
+       The client reads this on boot (see app.js → GAS_API_URL). If you
+       leave the placeholder, all API calls will fail with a network error.
+       ==================================================================== -->
+  <meta name="gas-api-url" content="REPLACE_WITH_YOUR_GAS_DEPLOYMENT_URL">
+
+  <!-- PWA manifest — served from the same static host (relative path). -->
+  <link rel="manifest" href="./manifest.json">
+  <!-- Inline SVG favicon: TWC teal tile + white cross -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23077187'/><rect x='28' y='10' width='8' height='44' fill='%23fff'/><rect x='10' y='28' width='44' height='8' fill='%23fff'/></svg>">
+  <!-- Plain CSS file (no HtmlService include). -->
+  <link rel="stylesheet" href="./styles.css">
+  <title>TWC Outreach Tracker</title>
+</head>
+<body>
+
+<!-- =====================================================================
+     AUTH VIEWS — login + forced first-login password change
+     ===================================================================== -->
+<div id="authView" class="auth-wrap">
+  <div class="auth-card">
+    <!-- LOGIN CARD -->
+    <div id="loginCard">
+      <div class="brand">
+        <div class="logo-box">
+          <span>TWC LABS</span>
+          <span class="cross">&#10010;</span>
+        </div>
+        <h1>Outreach Tracker</h1>
+        <p>Healthcare community data capture • NDPA &amp; NDHA compliant</p>
+      </div>
+      <form id="loginForm" autocomplete="off">
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" name="email" type="email" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div id="loginError" class="err" style="margin-bottom:8px;"></div>
+        <button class="btn btn-primary btn-block" type="submit" id="loginBtn">Sign In</button>
+      </form>
+      <p class="text-sm text-muted text-center mt-4">
+        Use the "Add to Home Screen" option to install as an app for offline use.
+      </p>
+    </div>
+
+    <!-- FIRST-LOGIN PASSWORD CHANGE -->
+    <div id="changePwCard" class="hidden">
+      <div class="brand">
+        <div class="logo-box">
+          <span>TWC LABS</span>
+          <span class="cross">&#10010;</span>
+        </div>
+        <h1>Set Your Password</h1>
+        <p>For security, please set a new password before continuing.</p>
+      </div>
+      <form id="changePwForm" autocomplete="off">
+        <div class="field">
+          <label for="curPw">Current (temporary) password</label>
+          <input id="curPw" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+          <label for="newPw">New password</label>
+          <input id="newPw" type="password" autocomplete="new-password" minlength="8" required>
+          <div class="hint">At least 8 characters. Do not reuse your temp password.</div>
+        </div>
+        <div class="field">
+          <label for="newPw2">Confirm new password</label>
+          <input id="newPw2" type="password" autocomplete="new-password" minlength="8" required>
+        </div>
+        <div id="changePwError" class="err" style="margin-bottom:8px;"></div>
+        <button class="btn btn-primary btn-block" type="submit">Update Password</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     APP SHELL — header, sidebar (desktop), tab bar (mobile), main views
+     ===================================================================== -->
+<div id="appView" class="app-shell hidden">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="logo">
+      <span class="cross"></span>
+      <span>TWC LABS</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="user-menu" id="userMenu" title="User menu">
+      <div class="avatar" id="userAvatar">U</div>
+      <span id="userName">User</span>
+      <button id="logoutBtn" class="btn btn-sm" style="color:#fff;padding:2px 8px;">Logout</button>
+    </div>
+  </header>
+
+  <div class="app-body">
+
+    <!-- SIDEBAR (desktop only) -->
+    <nav class="app-sidebar" id="sidebar">
+      <div class="role-badge" id="sidebarRole">Role</div>
+      <div id="sidebarNav"><!-- nav items injected per role --></div>
+    </nav>
+
+    <!-- MAIN VIEWS -->
+    <main class="app-main with-tabbar" id="appMain">
+      <!-- Views are toggled by navigate(view) in app.js -->
+      <!-- Loading state -->
+      <div id="loadingView" class="state">
+        <div class="spinner"></div>
+        <div class="title">Loading…</div>
+      </div>
+
+      <!-- ====================== DASHBOARD ====================== -->
+      <section id="view-dashboard" class="view hidden">
+        <h1 class="page-title">Dashboard <small id="dashSite">—</small></h1>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Welcome, <span id="dashName">User</span></div>
+              <div class="card-subtitle">Active outreach: <span id="dashOutreach">—</span></div>
+            </div>
+          </div>
+          <div class="metric-grid" id="dashMetrics">
+            <div class="metric-tile"><div class="num">—</div><div class="lbl">Patients</div></div>
+            <div class="metric-tile"><div class="num">—</div><div class="lbl">Vitals</div></div>
+            <div class="metric-tile"><div class="num">—</div><div class="lbl">Referrals</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== OUTREACHES ====================== -->
+      <section id="view-outreaches" class="view hidden">
+        <h1 class="page-title">Outreaches</h1>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Create Outreach</div>
+          </div>
+          <form id="outreachForm">
+            <div class="field">
+              <label>Name</label>
+              <input id="oName" placeholder="e.g. Surulere Community Outreach" required>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Date</label>
+                <input id="oDate" type="date" required>
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select id="oStatus">
+                  <option>Planned</option>
+                  <option>Active</option>
+                  <option>Completed</option>
+                  <option>Cancelled</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label>Venue</label>
+              <input id="oVenue" placeholder="e.g. Surulere Town Hall">
+            </div>
+            <div class="field" id="oSiteWrap">
+              <label>Site</label>
+              <select id="oSite"></select>
+            </div>
+            <button class="btn btn-primary" type="submit">Create Outreach</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">All Outreaches</div></div>
+          <div class="table-wrap">
+            <table class="table" id="outreachTable">
+              <thead><tr>
+                <th>Name</th><th>Date</th><th>Venue</th><th>Status</th><th>Action</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== REGISTRATION ====================== -->
+      <section id="view-registration" class="view hidden">
+        <h1 class="page-title">Register Patient</h1>
+        <div class="card">
+          <form id="patientForm" autocomplete="off">
+            <div class="field-row">
+              <div class="field">
+                <label>Full Name <span style="color:var(--twc-red)">*</span></label>
+                <input id="pName" required>
+                <div class="hint" id="dupWarn"></div>
+              </div>
+              <div class="field">
+                <label>Sex</label>
+                <select id="pSex">
+                  <option>Male</option><option>Female</option><option>Other</option><option>Unknown</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Age (or DOB)</label>
+                <input id="pAge" type="number" placeholder="e.g. 34">
+              </div>
+              <div class="field">
+                <label>OR Date of Birth</label>
+                <input id="pDob" type="date">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Phone</label>
+                <input id="pPhone" placeholder="080...">
+              </div>
+              <div class="field">
+                <label>Email (optional)</label>
+                <input id="pEmail" type="email">
+              </div>
+            </div>
+            <div class="field">
+              <label>Outreach</label>
+              <select id="pOutreach" required></select>
+            </div>
+            <!-- NDPA CONSENT -->
+            <div class="checkbox">
+              <input id="pConsent" type="checkbox" required>
+              <label>
+                Patient (or guardian) has given explicit consent for personal and health
+                data collection, storage and processing under the <strong>Nigeria Data Protection
+                Act (NDPA) 2023</strong>. This consent is logged with timestamp and registering officer.
+              </label>
+            </div>
+            <div id="patientError" class="err" style="margin:8px 0;"></div>
+            <button class="btn btn-primary" type="submit" id="patientSubmit">Register Patient</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ====================== PATIENT QUEUE (shared by Nurse/Lab/Eye/Dental) ====================== -->
+      <section id="view-queue" class="view hidden">
+        <h1 class="page-title">Patient Queue <small id="queueRoleHint"></small></h1>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Outreach</div>
+              <div class="card-subtitle">Select the active outreach to load its patient queue.</div>
+            </div>
+            <select id="queueOutreach" class="btn btn-sm btn-ghost" style="min-width:200px;"></select>
+            <button id="queueRefresh" class="btn btn-sm btn-secondary">Refresh</button>
+          </div>
+          <div id="queueList" class="queue-list"></div>
+        </div>
+
+        <!-- Capture forms injected per role below the queue -->
+        <div id="captureForms"></div>
+      </section>
+
+      <!-- ====================== PERSONNEL / INVITES ====================== -->
+      <section id="view-personnel" class="view hidden">
+        <h1 class="page-title">Invite Personnel</h1>
+        <div class="card">
+          <form id="inviteForm">
+            <div class="field-row">
+              <div class="field">
+                <label>Full Name</label>
+                <input id="invName" required>
+              </div>
+              <div class="field">
+                <label>Email</label>
+                <input id="invEmail" type="email" required>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Role</label>
+                <select id="invRole">
+                  <option>Nurse</option>
+                  <option>LabTechnician</option>
+                  <option>Optometrist</option>
+                  <option>Dentist</option>
+                  <option>Coordinator</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Outreach</label>
+                <select id="invOutreach"></select>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Send Invite</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Recent Invites</div></div>
+          <div class="table-wrap">
+            <table class="table" id="invitesTable">
+              <thead><tr><th>Email</th><th>Role</th><th>Temp Password</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== REFERRAL ====================== -->
+      <section id="view-referral" class="view hidden">
+        <h1 class="page-title">Issue Referral</h1>
+        <div class="card">
+          <form id="referralForm">
+            <div class="field">
+              <label>Patient</label>
+              <select id="refPatient" required></select>
+            </div>
+            <div class="field">
+              <label>Reason</label>
+              <textarea id="refReason" rows="3" placeholder="Clinical reason for referral"></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Destination</label>
+                <input id="refDestination" placeholder="e.g. Lagos State University Teaching Hospital">
+              </div>
+              <div class="field">
+                <label>Priority</label>
+                <select id="refPriority">
+                  <option>Routine</option><option>Urgent</option><option>Emergency</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Generate Referral Slip</button>
+          </form>
+        </div>
+        <div id="referralSlipHost"></div>
+      </section>
+
+      <!-- ====================== SITES (SuperAdmin) ====================== -->
+      <section id="view-sites" class="view hidden">
+        <h1 class="page-title">Site Management</h1>
+        <div class="card">
+          <form id="siteForm">
+            <div class="field-row">
+              <div class="field">
+                <label>Site Name</label>
+                <input id="sName" required>
+              </div>
+              <div class="field">
+                <label>Location</label>
+                <input id="sLocation">
+              </div>
+            </div>
+            <div class="field">
+              <label>Region</label>
+              <input id="sRegion" placeholder="e.g. Lagos">
+            </div>
+            <button class="btn btn-primary" type="submit">Add Site</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table" id="sitesTable">
+              <thead><tr><th>Name</th><th>Location</th><th>Region</th><th>Active</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== USERS (SuperAdmin) ====================== -->
+      <section id="view-users" class="view hidden">
+        <h1 class="page-title">Users</h1>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table" id="usersTable">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Site</th><th>Pw Change?</th><th>Active</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== AUDIT LOG (SuperAdmin) ====================== -->
+      <section id="view-audit" class="view hidden">
+        <h1 class="page-title">Audit Log <small>NDHA compliance</small></h1>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table" id="auditTable">
+              <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>Details</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== EXECUTIVE REPORT (SuperAdmin/Coordinator) ====================== -->
+      <section id="view-report" class="view hidden">
+        <h1 class="page-title">Executive Report</h1>
+        <div class="card">
+          <div class="field-row">
+            <div class="field">
+              <label>Outreach</label>
+              <select id="repOutreach"></select>
+            </div>
+            <div class="field" style="display:flex;align-items:flex-end;">
+              <button class="btn btn-primary" id="genReportBtn" style="width:100%;">Generate (Gemini)</button>
+            </div>
+          </div>
+          <p class="text-sm text-muted">
+            Aggregates patient demographics, vitals, diagnostics, eye &amp; dental findings, and
+            referrals, then calls Google Gemini 1.5 Flash for a PwC-style executive summary.
+          </p>
+        </div>
+        <div id="reportHost"></div>
+      </section>
+
+      <!-- Generic error state -->
+      <div id="errorView" class="state hidden">
+        <div class="icon">⚠️</div>
+        <div class="title" id="errTitle">Something went wrong</div>
+        <div class="msg" id="errMsg"></div>
+        <button class="btn btn-secondary mt-4" onclick="window.location.reload()">Reload</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- BOTTOM TAB BAR (mobile) — tabs injected per role -->
+  <nav class="app-tabbar" id="tabbar"></nav>
+</div>
+
+<!-- =====================================================================
+     VISUAL ACUITY TOOL — fullscreen overlay
+     ===================================================================== -->
+<div id="vaOverlay" class="va-overlay">
+  <div class="va-topbar">
+    <div class="title">Visual Acuity Tool</div>
+    <button class="close" id="vaClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="va-stage" id="vaStage">
+    <!-- Chart rows are injected as buttons -->
+    <div class="va-chart-wrap" id="vaChart"></div>
+    <!-- Live front-camera preview (top-right) -->
+    <video id="vaVideo" class="va-video hidden" autoplay muted playsinline></video>
+    <canvas id="vaCanvas" class="hidden" width="160" height="120"></canvas>
+    <div class="va-distance" id="vaDistance">Distance: — m</div>
+  </div>
+  <div class="va-controls">
+    <div class="info" id="vaInfo">
+      Cover your LEFT eye. Tap the smallest line you can read. The tool will calculate decimal acuity.
+    </div>
+    <button class="btn btn-sm" id="vaCalibrateBtn">Calibrate Distance (Card)</button>
+    <button class="btn btn-sm" id="vaCameraBtn">Toggle Camera</button>
+    <button class="btn btn-sm" id="vaConfirmBtn">Confirm Selection</button>
+  </div>
+</div>
+
+<!-- =====================================================================
+     REFERRAL SLIP PRINT CONTAINER (overlay, shown when slip generated)
+     ===================================================================== -->
+<div id="referralPrintHost"></div>
+
+<!-- =====================================================================
+     PWA INSTALL PROMPT
+     ===================================================================== -->
+<div id="pwaInstall" class="pwa-install">
+  <div class="ico">⬇️</div>
+  <div class="text">
+    <strong>Install TWC Tracker</strong>
+    Add to your home screen for offline access.
+  </div>
+  <button class="btn btn-sm btn-primary" id="pwaInstallBtn">Install</button>
+  <button class="btn btn-sm btn-ghost" id="pwaDismiss" style="color:#fff;">Later</button>
+</div>
+
+<!-- =====================================================================
+     TOAST HOST
+     ===================================================================== -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- =====================================================================
+     Client logic — vanilla JS, no frameworks.
+     Loaded as a plain external file (NOT via HtmlService include).
+     ===================================================================== -->
+<script src="./app.js" defer></script>
+</body>
+</html>
