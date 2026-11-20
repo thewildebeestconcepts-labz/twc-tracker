@@ -98,7 +98,7 @@ var FRONT_CAM_FOV_DEG = 65;
 var GAS_API_URL = (function () {
   var m = document.querySelector('meta[name="gas-api-url"]');
   var url = m ? m.getAttribute('content') : '';
-  if (!url || url.indexOf('REPLACE_WITH') === 0) {
+  if (!url || url.indexOf('https://script.google.com/macros/s/AKfycbxN1kDzI9NhJAryjOlPjxzBzgCoiZKdRE2tsKpwYN_4xShgsBBQ4v4A9xXiusKWU_tPiA/exec') === 0) {
     // Fallback for local dev / preview.
     return '';
   }
