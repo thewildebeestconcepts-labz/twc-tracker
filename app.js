@@ -39,7 +39,7 @@
  * holds the placeholder value. The deployer MUST edit the meta tag in
  * index.html (or set GAS_API_URL_FALLBACK here) for production.
  */
-var GAS_API_URL_FALLBACK = 'REPLACE_WITH_YOUR_GAS_DEPLOYMENT_URL';
+var GAS_API_URL_FALLBACK = 'https://script.google.com/macros/s/AKfycbxN1kDzI9NhJAryjOlPjxzBzgCoiZKdRE2tsKpwYN_4xShgsBBQ4v4A9xXiusKWU_tPiA/exec';
 
 function resolveGasApiUrl_() {
   var meta = document.querySelector('meta[name="gas-api-url"]');
