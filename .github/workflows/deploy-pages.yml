@@ -1,32 +1,31 @@
 # ===================================================================
 # TWC Outreach Tracker — Deploy static frontend to GitHub Pages
 # ===================================================================
-# This workflow deploys the gas-source/github-pages/ static files
-# (the Option B split-architecture frontend) to GitHub Pages.
+# Auto-detects whether your frontend files are at the repo root, in
+# gas-source/github-pages/, or in docs/ — and uploads the correct
+# directory. Also creates a .nojekyll file so GitHub Pages serves
+# the files as-is (no Jekyll processing that can break PWAs).
 #
-# REQUIRED REPOSITORY SETTINGS (do this once):
-#   1. Settings → Pages → Source: "GitHub Actions"
+# REQUIRED REPOSITORY SETTINGS (do this ONCE):
+#   1. Settings → Pages → Build and deployment → Source: "GitHub Actions"
 #   2. Settings → Actions → General → Workflow permissions:
 #        "Read and write permissions" ✓
 #
-# The `permissions` block below is the fix for the error:
-#   "Ensure GITHUB_TOKEN has permission 'id-token: write'"
+# The `permissions` block is required for actions/deploy-pages to
+# fetch an OIDC ID token and publish to GitHub Pages.
 # ===================================================================
 name: Deploy to GitHub Pages
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: # allows manual run from the Actions tab
+  workflow_dispatch:
 
-# CRITICAL — these permissions are required for actions/deploy-pages
-# to fetch an OIDC ID token and publish to GitHub Pages.
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -41,14 +40,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Determine site path
+        id: sitepath
+        run: |
+          # Auto-detect where index.html lives
+          if [ -f "gas-source/github-pages/index.html" ]; then
+            echo "path=gas-source/github-pages" >> "$GITHUB_OUTPUT"
+            echo "Found frontend files in gas-source/github-pages/"
+          elif [ -f "index.html" ]; then
+            echo "path=." >> "$GITHUB_OUTPUT"
+            echo "Found frontend files in repo root"
+          elif [ -f "docs/index.html" ]; then
+            echo "path=docs" >> "$GITHUB_OUTPUT"
+            echo "Found frontend files in docs/"
+          else
+            echo "::error::No index.html found. Put your frontend files (index.html, app.js, styles.css, manifest.json, sw.js) in the repo root, in gas-source/github-pages/, or in docs/."
+            echo "--- Repo contents ---"
+            ls -la
+            exit 1
+          fi
+
+      - name: Debug — list files to upload
+        run: |
+          echo "--- Files in ${{ steps.sitepath.outputs.path }} ---"
+          ls -la "${{ steps.sitepath.outputs.path }}"
+
+      - name: Create .nojekyll
+        run: |
+          # Prevent GitHub Pages Jekyll processing (which can drop files
+          # that start with _ or have no extension).
+          touch "${{ steps.sitepath.outputs.path }}/.nojekyll"
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload the static frontend files
-          path: ./gas-source/github-pages
+          path: ${{ steps.sitepath.outputs.path }}
 
       - name: Deploy to GitHub Pages
         id: deployment
