@@ -2,11 +2,16 @@
 <!--
   TWC Outreach Tracker — Split-architecture PWA shell (GitHub Pages)
   ====================================================================
-  Standalone HTML file (NOT a GAS HtmlService template). Hosted on GitHub
-  Pages (or any static host) and talks to the GAS JSON API via fetch().
+  This is a STANDALONE HTML file (NOT a GAS HtmlService template).
+  It is hosted on GitHub Pages (or any static host) and talks to the
+  GAS JSON API via fetch(). All template/scriptlet tags (<?!= include() ?>)
+  have been stripped.
 
-  DEPLOYER: edit <meta name="gas-api-url"> below to point at your
-  deployed GAS web app URL (the /exec URL).
+  ──────────────────────────────────────────────────────────────────────
+  DEPLOYER: edit the <meta name="gas-api-url"> tag below to point at
+  your deployed GAS web app URL (the /exec URL). The client reads this
+  meta tag on boot and routes every fetch() call to it.
+  ──────────────────────────────────────────────────────────────────────
 
   Author : TWC Labs
 -->
@@ -25,488 +30,182 @@
        Paste the URL of your deployed Apps Script Web App (the /exec URL,
        NOT /dev). Example:
          https://script.google.com/macros/s/AKfycb.../exec
+       The client reads this on boot (see app.js → GAS_API_URL). If you
+       leave the placeholder, all API calls will fail with a network error.
        ==================================================================== -->
-  <meta name="gas-api-url" content="https://script.google.com/macros/s/AKfycbxN1kDzI9NhJAryjOlPjxzBzgCoiZKdRE2tsKpwYN_4xShgsBBQ4v4A9xXiusKWU_tPiA/exec">
+  <meta name="gas-api-url" content="REPLACE_WITH_YOUR_GAS_DEPLOYMENT_URL">
 
+  <!-- PWA manifest — served from the same static host (relative path). -->
   <link rel="manifest" href="./manifest.json">
+  <!-- Inline SVG favicon: TWC teal tile + white cross -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23077187'/><rect x='28' y='10' width='8' height='44' fill='%23fff'/><rect x='10' y='28' width='44' height='8' fill='%23fff'/></svg>">
+  <!-- Plain CSS file (no HtmlService include). -->
   <link rel="stylesheet" href="./styles.css">
   <title>TWC Outreach Tracker</title>
 </head>
 <body>
 
 <!-- =====================================================================
-     AUTH VIEWS — login (NO demo accounts) + forced first-login password change
+     AUTH VIEWS — login + forced first-login password change
      ===================================================================== -->
-<div id="authView" class="auth-wrap hidden">
-  <!-- LOGIN CARD -->
-  <div id="loginCard" class="auth-card">
-    <div class="auth-hero">
-      <div class="auth-logo-ring">
-        <div class="twc-logo-tile" data-size="64">
-          <svg viewBox="0 0 48 48" width="58" height="58" fill="none" aria-hidden="true">
-            <rect x="33" y="6" width="3.4" height="9" rx="1" fill="#fff"/>
-            <rect x="30.4" y="8.6" width="8.6" height="3.4" rx="1" fill="#fff"/>
-            <rect x="6" y="6" width="36" height="36" rx="5" stroke="#fff" stroke-width="2.2" fill="none"/>
-            <text x="24" y="24" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="9.5" fill="#fff" letter-spacing="0.5">TWC</text>
-            <text x="24" y="34" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="700" font-size="6.2" fill="#fff" letter-spacing="1.4">LABS</text>
-          </svg>
+<div id="authView" class="auth-wrap">
+  <div class="auth-card">
+    <!-- LOGIN CARD -->
+    <div id="loginCard">
+      <div class="brand">
+        <div class="logo-box">
+          <span>TWC LABS</span>
+          <span class="cross">&#10010;</span>
         </div>
+        <h1>Outreach Tracker</h1>
+        <p>Healthcare community data capture • NDPA &amp; NDHA compliant</p>
       </div>
-      <h1>TWC Outreach Tracker</h1>
-      <p>Secure community healthcare outreach capture — NDPA &amp; NDHA compliant</p>
+      <form id="loginForm" autocomplete="off">
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" name="email" type="email" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div id="loginError" class="err" style="margin-bottom:8px;"></div>
+        <button class="btn btn-primary btn-block" type="submit" id="loginBtn">Sign In</button>
+      </form>
+      <p class="text-sm text-muted text-center mt-4">
+        Use the "Add to Home Screen" option to install as an app for offline use.
+      </p>
     </div>
 
-    <form id="loginForm" autocomplete="off" novalidate>
-      <div class="field">
-        <label for="loginEmail">Email address</label>
-        <div class="input-icon-wrap">
-          <span class="input-ico" aria-hidden="true">✉</span>
-          <input id="loginEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@twclabs.org" required>
+    <!-- FIRST-LOGIN PASSWORD CHANGE -->
+    <div id="changePwCard" class="hidden">
+      <div class="brand">
+        <div class="logo-box">
+          <span>TWC LABS</span>
+          <span class="cross">&#10010;</span>
         </div>
+        <h1>Set Your Password</h1>
+        <p>For security, please set a new password before continuing.</p>
       </div>
-      <div class="field">
-        <label for="loginPassword">Password</label>
-        <div class="input-icon-wrap">
-          <span class="input-ico" aria-hidden="true">🔒</span>
-          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" required>
-          <button type="button" id="pwToggleBtn" class="input-trailing-btn" aria-label="Show password">👁</button>
+      <form id="changePwForm" autocomplete="off">
+        <div class="field">
+          <label for="curPw">Current (temporary) password</label>
+          <input id="curPw" type="password" autocomplete="current-password" required>
         </div>
-      </div>
-      <div class="auth-row">
-        <label class="checkbox-inline">
-          <input id="loginRemember" type="checkbox" checked>
-          <span>Keep me signed in</span>
-        </label>
-        <span class="auth-link-muted">Forgot password?</span>
-      </div>
-      <div id="loginError" class="err hidden"></div>
-      <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn">Sign in securely</button>
-      <div class="auth-footnote">
-        <span class="shield-ico">🛡</span>
-        SHA-256 hashed · Role-based access · Audit logged
-      </div>
-    </form>
-  </div>
-
-  <!-- FIRST-LOGIN FORCED PASSWORD CHANGE -->
-  <div id="changePwCard" class="auth-card hidden">
-    <div class="auth-hero">
-      <div class="auth-logo-ring">
-        <div class="twc-logo-tile" data-size="56">
-          <svg viewBox="0 0 48 48" width="51" height="51" fill="none" aria-hidden="true">
-            <rect x="33" y="6" width="3.4" height="9" rx="1" fill="#fff"/>
-            <rect x="30.4" y="8.6" width="8.6" height="3.4" rx="1" fill="#fff"/>
-            <rect x="6" y="6" width="36" height="36" rx="5" stroke="#fff" stroke-width="2.2" fill="none"/>
-            <text x="24" y="24" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="9.5" fill="#fff" letter-spacing="0.5">TWC</text>
-            <text x="24" y="34" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="700" font-size="6.2" fill="#fff" letter-spacing="1.4">LABS</text>
-          </svg>
+        <div class="field">
+          <label for="newPw">New password</label>
+          <input id="newPw" type="password" autocomplete="new-password" minlength="8" required>
+          <div class="hint">At least 8 characters. Do not reuse your temp password.</div>
         </div>
-      </div>
-      <h1>Set your permanent password</h1>
-      <p>You signed in with a temporary password. For your security, choose a new one now.</p>
+        <div class="field">
+          <label for="newPw2">Confirm new password</label>
+          <input id="newPw2" type="password" autocomplete="new-password" minlength="8" required>
+        </div>
+        <div id="changePwError" class="err" style="margin-bottom:8px;"></div>
+        <button class="btn btn-primary btn-block" type="submit">Update Password</button>
+      </form>
     </div>
-    <div class="auth-as">Signed in as <strong id="changePwEmail">—</strong></div>
-    <form id="changePwForm" autocomplete="off" novalidate>
-      <div class="field">
-        <label for="curPw">Current (temporary) password</label>
-        <input id="curPw" type="password" autocomplete="current-password" required>
-      </div>
-      <div class="field">
-        <label for="newPw">New password (min 8 chars)</label>
-        <input id="newPw" type="password" autocomplete="new-password" minlength="8" required>
-      </div>
-      <div class="field">
-        <label for="newPw2">Confirm new password</label>
-        <input id="newPw2" type="password" autocomplete="new-password" minlength="8" required>
-      </div>
-      <div id="changePwError" class="err hidden"></div>
-      <button type="submit" class="btn btn-primary btn-block btn-lg">Update &amp; sign in</button>
-    </form>
   </div>
 </div>
 
 <!-- =====================================================================
-     APP SHELL
+     APP SHELL — header, sidebar (desktop), tab bar (mobile), main views
      ===================================================================== -->
 <div id="appView" class="app-shell hidden">
+
   <!-- HEADER -->
   <header class="app-header">
-    <div class="header-inner">
-      <div class="header-left">
-        <button class="icon-btn header-menu-btn" id="mobileMenuBtn" aria-label="Open menu">☰</button>
-        <div class="twc-logo-tile" data-size="34">
-          <svg viewBox="0 0 48 48" width="31" height="31" fill="none" aria-hidden="true">
-            <rect x="33" y="6" width="3.4" height="9" rx="1" fill="#fff"/>
-            <rect x="30.4" y="8.6" width="8.6" height="3.4" rx="1" fill="#fff"/>
-            <rect x="6" y="6" width="36" height="36" rx="5" stroke="#fff" stroke-width="2.2" fill="none"/>
-            <text x="24" y="24" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="9.5" fill="#fff" letter-spacing="0.5">TWC</text>
-            <text x="24" y="34" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="700" font-size="6.2" fill="#fff" letter-spacing="1.4">LABS</text>
-          </svg>
-        </div>
-        <div class="logo-text">
-          <div class="logo-name">TWC <span class="logo-name-accent">Labs</span></div>
-          <div class="logo-sub">Outreach Tracker</div>
-        </div>
-      </div>
-      <div class="header-right">
-        <span class="role-badge" id="headerRoleBadge">Role</span>
-        <span class="header-site hidden" id="headerSite">All sites</span>
-        <div class="user-menu-wrap">
-          <button class="user-trigger" id="userTrigger" aria-haspopup="true" aria-expanded="false">
-            <span class="avatar avatar-sm" id="headerAvatar">U</span>
-            <span class="header-username" id="headerUserName">User</span>
-            <span class="caret">▾</span>
-          </button>
-          <div class="dropdown" id="userDropdown" role="menu">
-            <div class="dropdown-header">
-              <div class="dropdown-name" id="ddFullName">User</div>
-              <div class="dropdown-email" id="ddEmail">—</div>
-            </div>
-            <div class="dropdown-divider"></div>
-            <div class="dropdown-static" id="ddRole">Role: —</div>
-            <div class="dropdown-static" id="ddSite">Site: —</div>
-            <div class="dropdown-divider"></div>
-            <button class="dropdown-item hidden" id="ddGasSourceBtn" role="menuitem">&lt;/&gt; View GAS source</button>
-            <button class="dropdown-item danger" id="ddSignOutBtn" role="menuitem">⎋ Sign out</button>
-          </div>
-        </div>
-      </div>
+    <div class="logo">
+      <span class="cross"></span>
+      <span>TWC LABS</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="user-menu" id="userMenu" title="User menu">
+      <div class="avatar" id="userAvatar">U</div>
+      <span id="userName">User</span>
+      <button id="logoutBtn" class="btn btn-sm" style="color:#fff;padding:2px 8px;">Logout</button>
     </div>
   </header>
 
-  <!-- BODY: sidebar + main -->
   <div class="app-body">
-    <!-- DESKTOP SIDEBAR (≥1024px) -->
-    <aside class="app-sidebar" id="sidebar">
-      <nav class="nav-list" id="sidebarNav"></nav>
-      <div class="sidebar-foot">
-        <div class="ndpa-card">
-          <div class="ndpa-card-title">🛡 NDPA / NDHA</div>
-          <div class="ndpa-card-sub">Consent captured · RBAC enforced · Audit logged</div>
-        </div>
-      </div>
-    </aside>
 
-    <!-- MOBILE DRAWER -->
-    <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
-    <aside class="app-drawer" id="mobileDrawer">
-      <div class="drawer-head">
-        <div class="twc-logo-tile" data-size="30">
-          <svg viewBox="0 0 48 48" width="27" height="27" fill="none" aria-hidden="true">
-            <rect x="33" y="6" width="3.4" height="9" rx="1" fill="#fff"/>
-            <rect x="30.4" y="8.6" width="8.6" height="3.4" rx="1" fill="#fff"/>
-            <rect x="6" y="6" width="36" height="36" rx="5" stroke="#fff" stroke-width="2.2" fill="none"/>
-            <text x="24" y="24" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="9.5" fill="#fff" letter-spacing="0.5">TWC</text>
-            <text x="24" y="34" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="700" font-size="6.2" fill="#fff" letter-spacing="1.4">LABS</text>
-          </svg>
-        </div>
-        <button class="icon-btn" id="drawerCloseBtn" aria-label="Close menu">✕</button>
-      </div>
-      <nav class="nav-list" id="drawerNav"></nav>
-    </aside>
+    <!-- SIDEBAR (desktop only) -->
+    <nav class="app-sidebar" id="sidebar">
+      <div class="role-badge" id="sidebarRole">Role</div>
+      <div id="sidebarNav"><!-- nav items injected per role --></div>
+    </nav>
 
-    <!-- MAIN -->
-    <main class="app-main" id="appMain">
+    <!-- MAIN VIEWS -->
+    <main class="app-main with-tabbar" id="appMain">
+      <!-- Views are toggled by navigate(view) in app.js -->
+      <!-- Loading state -->
+      <div id="loadingView" class="state">
+        <div class="spinner"></div>
+        <div class="title">Loading…</div>
+      </div>
 
       <!-- ====================== DASHBOARD ====================== -->
       <section id="view-dashboard" class="view hidden">
-        <div class="hero-banner">
-          <div class="hero-watermark">
-            <div class="twc-logo-tile" data-size="140">
-              <svg viewBox="0 0 48 48" width="128" height="128" fill="none" aria-hidden="true">
-                <rect x="33" y="6" width="3.4" height="9" rx="1" fill="#fff"/>
-                <rect x="30.4" y="8.6" width="8.6" height="3.4" rx="1" fill="#fff"/>
-                <rect x="6" y="6" width="36" height="36" rx="5" stroke="#fff" stroke-width="2.2" fill="none"/>
-                <text x="24" y="24" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="800" font-size="9.5" fill="#fff" letter-spacing="0.5">TWC</text>
-                <text x="24" y="34" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="700" font-size="6.2" fill="#fff" letter-spacing="1.4">LABS</text>
-              </svg>
+        <h1 class="page-title">Dashboard <small id="dashSite">—</small></h1>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Welcome, <span id="dashName">User</span></div>
+              <div class="card-subtitle">Active outreach: <span id="dashOutreach">—</span></div>
             </div>
           </div>
-          <div class="hero-content">
-            <div class="hero-eyebrow">Welcome back</div>
-            <h1 class="hero-title" id="heroName">User</h1>
-            <div class="hero-meta">
-              <span id="heroRoleIcon">🏢</span>
-              <span id="heroRole">Role</span>
-              <span class="dot-sep">·</span>
-              <span id="heroSite">All sites</span>
-            </div>
-          </div>
-        </div>
-
-        <div id="dashOutreachHost"></div>
-
-        <div class="stat-grid hidden" id="dashStats">
-          <button class="stat-card stat-emerald" id="statVitals">
-            <div class="stat-icon">❤</div>
-            <div class="stat-num" id="statVitalsNum">0</div>
-            <div class="stat-lbl">Vitals</div>
-            <div class="stat-pending hidden" id="statVitalsPending"></div>
-          </button>
-          <button class="stat-card stat-amber" id="statDiagnostics">
-            <div class="stat-icon">⚗</div>
-            <div class="stat-num" id="statDiagNum">0</div>
-            <div class="stat-lbl">Blood Sugar</div>
-            <div class="stat-pending hidden" id="statDiagPending"></div>
-          </button>
-          <button class="stat-card stat-sky" id="statEye">
-            <div class="stat-icon">👁</div>
-            <div class="stat-num" id="statEyeNum">0</div>
-            <div class="stat-lbl">Eye Checks</div>
-            <div class="stat-pending hidden" id="statEyePending"></div>
-          </button>
-          <button class="stat-card stat-rose" id="statDental">
-            <div class="stat-icon">😁</div>
-            <div class="stat-num" id="statDentalNum">0</div>
-            <div class="stat-lbl">Dental</div>
-            <div class="stat-pending hidden" id="statDentalPending"></div>
-          </button>
-        </div>
-
-        <!-- SuperAdmin Demo Data Management -->
-        <div id="demoDataCard" class="card demo-card hidden">
-          <div class="demo-card-header">
-            <div class="demo-card-title">⚡ Demo Data Management</div>
-            <div class="demo-card-sub">SuperAdmin only · reset or clear test data to re-run the contactless vitals, visual acuity &amp; AI dental scan tools on fresh patients.</div>
-          </div>
-          <div class="demo-card-body">
-            <div class="demo-tile">
-              <div class="demo-tile-title"><span class="demo-ico">🧽</span> Clear Captures</div>
-              <p class="demo-tile-desc">Wipes all vitals, diagnostics, eye &amp; dental checks and referrals. Keeps patients — every patient becomes "pending" so you can re-test the tools on the same people.</p>
-              <button class="btn btn-outline btn-block" id="clearCapturesBtn">🧽 Clear captures</button>
-            </div>
-            <div class="demo-tile">
-              <div class="demo-tile-title danger"><span class="demo-ico">⚡</span> Reset All Demo Data</div>
-              <p class="demo-tile-desc">Wipes everything (patients + captures + referrals + invites + audit log) and re-creates fresh demo patients in the active outreach. Clean slate.</p>
-              <button class="btn btn-danger btn-block" id="resetDemoBtn">⚡ Reset all demo data</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="compliance-banner">
-          <span class="compliance-ico">🛡</span>
-          <div>
-            <div class="compliance-title">NDPA &amp; NDHA compliant</div>
-            <div class="compliance-sub">Patient PII protected by explicit consent capture, role-based access control, and full audit logging of every record access and edit.</div>
+          <div class="metric-grid" id="dashMetrics">
+            <div class="metric-tile"><div class="num">—</div><div class="lbl">Patients</div></div>
+            <div class="metric-tile"><div class="num">—</div><div class="lbl">Vitals</div></div>
+            <div class="metric-tile"><div class="num">—</div><div class="lbl">Referrals</div></div>
           </div>
         </div>
       </section>
 
       <!-- ====================== OUTREACHES ====================== -->
       <section id="view-outreaches" class="view hidden">
-        <div class="page-head">
-          <h1>Outreaches</h1>
-          <p>Create &amp; manage community outreach events</p>
-        </div>
-        <div class="page-head-actions">
-          <button class="btn btn-primary" id="newOutreachBtn">+ New outreach</button>
-        </div>
-
-        <div id="outreachList" class="list-stack"></div>
-      </section>
-
-      <!-- ====================== REGISTER PATIENT ====================== -->
-      <section id="view-register-patient" class="view hidden">
-        <div class="page-head">
-          <h1>Register Patient</h1>
-          <p id="regOutreach">—</p>
-        </div>
-        <div class="card form-card">
-          <form id="patientForm" autocomplete="off" novalidate>
+        <h1 class="page-title">Outreaches</h1>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Create Outreach</div>
+          </div>
+          <form id="outreachForm">
             <div class="field">
-              <label>Full name <span class="req">*</span></label>
-              <input id="pName" placeholder="Chukwuemeka Nwosu" required>
-              <div class="hint hidden warning" id="dupWarn">⚠ A patient with this name already exists in this outreach</div>
+              <label>Name</label>
+              <input id="oName" placeholder="e.g. Surulere Community Outreach" required>
             </div>
             <div class="field-row">
               <div class="field">
-                <label>Age</label>
-                <input id="pAge" type="number" inputmode="numeric" placeholder="45">
+                <label>Date</label>
+                <input id="oDate" type="date" required>
               </div>
               <div class="field">
-                <label>OR Date of birth</label>
-                <input id="pDob" type="date">
-              </div>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label>Sex</label>
-                <select id="pSex"><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></select>
-              </div>
-              <div class="field">
-                <label>Phone</label>
-                <input id="pPhone" type="tel" inputmode="tel" placeholder="+234 801 234 5678">
-              </div>
-            </div>
-            <div class="field">
-              <label>Email (optional)</label>
-              <input id="pEmail" type="email" placeholder="patient@example.com">
-            </div>
-            <button type="button" class="consent-toggle" id="pConsentBtn" aria-pressed="false">
-              <span class="consent-box">✓</span>
-              <span>
-                <strong>NDPA consent *</strong>
-                <span class="consent-desc">Patient consents to collection &amp; processing of their health data for this outreach, per the Nigeria Data Protection Act.</span>
-              </span>
-            </button>
-            <div id="patientError" class="err hidden"></div>
-            <button type="submit" class="btn btn-primary btn-block btn-lg" id="patientSubmit">+ Register patient</button>
-          </form>
-        </div>
-        <div class="section-label">Recent registrations</div>
-        <div id="recentPatients" class="list-stack"></div>
-      </section>
-
-      <!-- ====================== PERSONNEL ====================== -->
-      <section id="view-personnel" class="view hidden">
-        <div class="page-head">
-          <h1>Invite Personnel</h1>
-          <p>Email invite with auto-generated temporary password · forces change on first login</p>
-        </div>
-        <div class="card form-card">
-          <form id="inviteForm" autocomplete="off" novalidate>
-            <div class="field">
-              <label>Full name</label>
-              <input id="invName" placeholder="Dr. Jane Doe" required>
-            </div>
-            <div class="field">
-              <label>Email</label>
-              <input id="invEmail" type="email" placeholder="jane@twclabs.org" required>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label>Role</label>
-                <select id="invRole" required>
-                  <option value="">Select role</option>
-                  <option value="Coordinator">Outreach Coordinator</option>
-                  <option value="Nurse">Nurse</option>
-                  <option value="LabTechnician">Lab Technician</option>
-                  <option value="Optometrist">Optometrist</option>
-                  <option value="Dentist">Dentist</option>
+                <label>Status</label>
+                <select id="oStatus">
+                  <option>Planned</option>
+                  <option>Active</option>
+                  <option>Completed</option>
+                  <option>Cancelled</option>
                 </select>
               </div>
-              <div class="field hidden" id="invSiteWrap">
-                <label>Site</label>
-                <select id="invSite"></select>
-              </div>
             </div>
-            <div id="inviteError" class="err hidden"></div>
-            <button type="submit" class="btn btn-primary btn-block btn-lg" id="inviteSubmit">✉ Send invite email</button>
+            <div class="field">
+              <label>Venue</label>
+              <input id="oVenue" placeholder="e.g. Surulere Town Hall">
+            </div>
+            <div class="field" id="oSiteWrap">
+              <label>Site</label>
+              <select id="oSite"></select>
+            </div>
+            <button class="btn btn-primary" type="submit">Create Outreach</button>
           </form>
         </div>
-
-        <div id="inviteConfirmHost"></div>
-
-        <div class="section-label">Invite history</div>
-        <div id="inviteHistory" class="list-stack"></div>
-      </section>
-
-      <!-- ====================== PATIENT QUEUE ====================== -->
-      <section id="view-queue" class="view hidden">
-        <div class="page-head">
-          <h1>Patient Queue</h1>
-          <p><span id="queueOutreachName">—</span> · <span id="queueCount">0</span> registered</p>
-        </div>
-        <div class="search-wrap">
-          <span class="search-ico">🔍</span>
-          <input id="queueSearch" type="search" placeholder="Search by name or patient code…">
-        </div>
-        <div class="queue-hint" id="queueHint"></div>
-        <div id="queueList" class="queue-list"></div>
-      </section>
-
-      <!-- ====================== VITALS (Nurse) ====================== -->
-      <section id="view-vitals" class="view hidden"></section>
-
-      <!-- ====================== DIAGNOSTICS (Lab Tech) ====================== -->
-      <section id="view-diagnostics" class="view hidden"></section>
-
-      <!-- ====================== EYE (Optometrist) ====================== -->
-      <section id="view-eye" class="view hidden"></section>
-
-      <!-- ====================== DENTAL (Dentist) ====================== -->
-      <section id="view-dental" class="view hidden"></section>
-
-      <!-- ====================== REFERRALS ====================== -->
-      <section id="view-referrals" class="view hidden">
-        <div class="page-head">
-          <h1>Referral Slips</h1>
-          <p>Generate printable, PDF-ready referral slips</p>
-        </div>
-        <div class="card form-card">
-          <div class="field">
-            <label>Patient</label>
-            <select id="refPatient"><option value="">Select patient…</option></select>
-          </div>
-          <div class="field">
-            <label>Reason for referral</label>
-            <textarea id="refReason" rows="3" placeholder="e.g. Suspected glaucoma, raised IOP"></textarea>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label>Destination facility</label>
-              <input id="refDestination" placeholder="Lagos State Teaching Hospital">
-            </div>
-            <div class="field">
-              <label>Priority</label>
-              <select id="refPriority">
-                <option value="Routine">Routine</option>
-                <option value="Urgent">Urgent</option>
-                <option value="Emergency">Emergency</option>
-              </select>
-            </div>
-          </div>
-          <div id="referralError" class="err hidden"></div>
-          <button type="button" class="btn btn-primary btn-block btn-lg" id="referralSubmit">+ Generate referral slip</button>
-        </div>
-        <div class="section-label">Recent referrals</div>
-        <div id="referralList" class="list-stack"></div>
-      </section>
-
-      <!-- ====================== SITES (SuperAdmin) ====================== -->
-      <section id="view-sites" class="view hidden">
-        <div class="page-head">
-          <h1>Sites &amp; Locations</h1>
-          <p>Multi-site support — every record is tagged by site</p>
-        </div>
-        <div class="grid-2">
-          <div class="card form-card">
-            <div class="card-title-sm"><span class="ico-primary">+</span> Add site</div>
-            <form id="siteForm" autocomplete="off">
-              <div class="field"><label>Name</label><input id="sName" placeholder="Ibadan Clinic" required></div>
-              <div class="field"><label>Location</label><input id="sLocation" placeholder="Bodija, Ibadan" required></div>
-              <div class="field"><label>Region</label><input id="sRegion" placeholder="South-West"></div>
-              <button type="submit" class="btn btn-primary btn-block">Create site</button>
-            </form>
-          </div>
-          <div class="card form-card">
-            <div class="card-title-sm"><span class="ico-primary">🏢</span> Active sites</div>
-            <div id="sitesList" class="list-stack tight"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ====================== USERS (SuperAdmin) ====================== -->
-      <section id="view-users" class="view hidden">
-        <div class="page-head">
-          <h1>User Management</h1>
-          <p>All personnel across sites</p>
-        </div>
-        <div id="usersList" class="list-stack"></div>
-      </section>
-
-      <!-- ====================== AUDIT (SuperAdmin) ====================== -->
-      <section id="view-audit" class="view hidden">
-        <div class="page-head">
-          <h1>Audit Log</h1>
-          <p>NDHA — who accessed/edited what, when</p>
-        </div>
-        <div class="card audit-card">
-          <div class="audit-scroll">
-            <table class="table" id="auditTable">
+        <div class="card">
+          <div class="card-header"><div class="card-title">All Outreaches</div></div>
+          <div class="table-wrap">
+            <table class="table" id="outreachTable">
               <thead><tr>
-                <th>Time</th><th>User</th><th>Action</th><th>Resource</th><th class="hide-sm">Details</th>
+                <th>Name</th><th>Date</th><th>Venue</th><th>Status</th><th>Action</th>
               </tr></thead>
               <tbody></tbody>
             </table>
@@ -514,197 +213,294 @@
         </div>
       </section>
 
-      <!-- ====================== REPORTS (SuperAdmin / Coordinator) ====================== -->
-      <section id="view-reports" class="view hidden">
-        <div class="page-head">
-          <h1>Executive Report</h1>
-          <p>PwC-style summary via Gemini · metrics, demographics &amp; health trends</p>
+      <!-- ====================== REGISTRATION ====================== -->
+      <section id="view-registration" class="view hidden">
+        <h1 class="page-title">Register Patient</h1>
+        <div class="card">
+          <form id="patientForm" autocomplete="off">
+            <div class="field-row">
+              <div class="field">
+                <label>Full Name <span style="color:var(--twc-red)">*</span></label>
+                <input id="pName" required>
+                <div class="hint" id="dupWarn"></div>
+              </div>
+              <div class="field">
+                <label>Sex</label>
+                <select id="pSex">
+                  <option>Male</option><option>Female</option><option>Other</option><option>Unknown</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Age (or DOB)</label>
+                <input id="pAge" type="number" placeholder="e.g. 34">
+              </div>
+              <div class="field">
+                <label>OR Date of Birth</label>
+                <input id="pDob" type="date">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Phone</label>
+                <input id="pPhone" placeholder="080...">
+              </div>
+              <div class="field">
+                <label>Email (optional)</label>
+                <input id="pEmail" type="email">
+              </div>
+            </div>
+            <div class="field">
+              <label>Outreach</label>
+              <select id="pOutreach" required></select>
+            </div>
+            <!-- NDPA CONSENT -->
+            <div class="checkbox">
+              <input id="pConsent" type="checkbox" required>
+              <label>
+                Patient (or guardian) has given explicit consent for personal and health
+                data collection, storage and processing under the <strong>Nigeria Data Protection
+                Act (NDPA) 2023</strong>. This consent is logged with timestamp and registering officer.
+              </label>
+            </div>
+            <div id="patientError" class="err" style="margin:8px 0;"></div>
+            <button class="btn btn-primary" type="submit" id="patientSubmit">Register Patient</button>
+          </form>
         </div>
-        <div class="report-controls">
-          <div class="field field-inline">
-            <label>Outreach</label>
-            <select id="repOutreach"></select>
+      </section>
+
+      <!-- ====================== PATIENT QUEUE (shared by Nurse/Lab/Eye/Dental) ====================== -->
+      <section id="view-queue" class="view hidden">
+        <h1 class="page-title">Patient Queue <small id="queueRoleHint"></small></h1>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Outreach</div>
+              <div class="card-subtitle">Select the active outreach to load its patient queue.</div>
+            </div>
+            <select id="queueOutreach" class="btn btn-sm btn-ghost" style="min-width:200px;"></select>
+            <button id="queueRefresh" class="btn btn-sm btn-secondary">Refresh</button>
           </div>
-          <button class="btn btn-primary" id="genReportBtn">✨ Generate</button>
-          <button class="btn btn-outline hidden" id="repPrintBtn">🖨 Print</button>
+          <div id="queueList" class="queue-list"></div>
         </div>
-        <div id="reportMetricsHost" class="metric-grid hidden"></div>
+
+        <!-- Capture forms injected per role below the queue -->
+        <div id="captureForms"></div>
+      </section>
+
+      <!-- ====================== PERSONNEL / INVITES ====================== -->
+      <section id="view-personnel" class="view hidden">
+        <h1 class="page-title">Invite Personnel</h1>
+        <div class="card">
+          <form id="inviteForm">
+            <div class="field-row">
+              <div class="field">
+                <label>Full Name</label>
+                <input id="invName" required>
+              </div>
+              <div class="field">
+                <label>Email</label>
+                <input id="invEmail" type="email" required>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Role</label>
+                <select id="invRole">
+                  <option>Nurse</option>
+                  <option>LabTechnician</option>
+                  <option>Optometrist</option>
+                  <option>Dentist</option>
+                  <option>Coordinator</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Outreach</label>
+                <select id="invOutreach"></select>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Send Invite</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Recent Invites</div></div>
+          <div class="table-wrap">
+            <table class="table" id="invitesTable">
+              <thead><tr><th>Email</th><th>Role</th><th>Temp Password</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== REFERRAL ====================== -->
+      <section id="view-referral" class="view hidden">
+        <h1 class="page-title">Issue Referral</h1>
+        <div class="card">
+          <form id="referralForm">
+            <div class="field">
+              <label>Patient</label>
+              <select id="refPatient" required></select>
+            </div>
+            <div class="field">
+              <label>Reason</label>
+              <textarea id="refReason" rows="3" placeholder="Clinical reason for referral"></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Destination</label>
+                <input id="refDestination" placeholder="e.g. Lagos State University Teaching Hospital">
+              </div>
+              <div class="field">
+                <label>Priority</label>
+                <select id="refPriority">
+                  <option>Routine</option><option>Urgent</option><option>Emergency</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Generate Referral Slip</button>
+          </form>
+        </div>
+        <div id="referralSlipHost"></div>
+      </section>
+
+      <!-- ====================== SITES (SuperAdmin) ====================== -->
+      <section id="view-sites" class="view hidden">
+        <h1 class="page-title">Site Management</h1>
+        <div class="card">
+          <form id="siteForm">
+            <div class="field-row">
+              <div class="field">
+                <label>Site Name</label>
+                <input id="sName" required>
+              </div>
+              <div class="field">
+                <label>Location</label>
+                <input id="sLocation">
+              </div>
+            </div>
+            <div class="field">
+              <label>Region</label>
+              <input id="sRegion" placeholder="e.g. Lagos">
+            </div>
+            <button class="btn btn-primary" type="submit">Add Site</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table" id="sitesTable">
+              <thead><tr><th>Name</th><th>Location</th><th>Region</th><th>Active</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== USERS (SuperAdmin) ====================== -->
+      <section id="view-users" class="view hidden">
+        <h1 class="page-title">Users</h1>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table" id="usersTable">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Site</th><th>Pw Change?</th><th>Active</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== AUDIT LOG (SuperAdmin) ====================== -->
+      <section id="view-audit" class="view hidden">
+        <h1 class="page-title">Audit Log <small>NDHA compliance</small></h1>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table" id="auditTable">
+              <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>Details</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== EXECUTIVE REPORT (SuperAdmin/Coordinator) ====================== -->
+      <section id="view-report" class="view hidden">
+        <h1 class="page-title">Executive Report</h1>
+        <div class="card">
+          <div class="field-row">
+            <div class="field">
+              <label>Outreach</label>
+              <select id="repOutreach"></select>
+            </div>
+            <div class="field" style="display:flex;align-items:flex-end;">
+              <button class="btn btn-primary" id="genReportBtn" style="width:100%;">Generate (Gemini)</button>
+            </div>
+          </div>
+          <p class="text-sm text-muted">
+            Aggregates patient demographics, vitals, diagnostics, eye &amp; dental findings, and
+            referrals, then calls Google Gemini 1.5 Flash for a PwC-style executive summary.
+          </p>
+        </div>
         <div id="reportHost"></div>
       </section>
 
-      <!-- ====================== GAS SOURCE (SuperAdmin ONLY) ====================== -->
-      <section id="view-gas-source" class="view hidden">
-        <div class="gas-hero">
-          <div class="gas-hero-eyebrow">🚀 Deployment-ready</div>
-          <h1>TWC Outreach Tracker — Source &amp; Deployment</h1>
-          <p id="gasHeroDesc"></p>
-          <div class="gas-hero-tags">
-            <span class="gas-tag">HtmlService / fetch</span>
-            <span class="gas-tag">Google Sheets DB</span>
-            <span class="gas-tag">Gemini API</span>
-            <span class="gas-tag">PWA + Service Worker</span>
-            <span class="gas-tag">MailApp invites</span>
-          </div>
-        </div>
-        <div class="grid-2">
-          <button class="arch-card" id="archOptionA">
-            <div class="arch-head">
-              <div class="arch-left"><div class="arch-ico">☁</div><div><div class="arch-title">Option A — All-in-GAS</div><span class="arch-tag">Simplest</span></div></div>
-              <span class="arch-count" id="archCountA">0 files</span>
-            </div>
-            <ul class="arch-points"><li>Single GAS deployment</li><li>google.script.run client→server</li><li>GAS serves the PWA directly</li><li>6 files: Code.gs + 5 HTML/JSON</li></ul>
-          </button>
-          <button class="arch-card" id="archOptionB">
-            <div class="arch-head">
-              <div class="arch-left"><div class="arch-ico">⌥</div><div><div class="arch-title">Option B — GAS API + GitHub Pages</div><span class="arch-tag">Split</span></div></div>
-              <span class="arch-count" id="archCountB">0 files</span>
-            </div>
-            <ul class="arch-points"><li>Backend: GAS JSON API (ContentService)</li><li>Frontend: static files on GitHub Pages</li><li>fetch() with token auth (no cookies)</li><li>Custom domain + CDN + version control</li></ul>
-          </button>
-        </div>
-        <div class="compliance-banner">
-          <span class="compliance-ico">🛡</span>
-          <div>
-            <div class="compliance-title">NDPA &amp; NDHA compliant in both architectures</div>
-            <div class="compliance-sub">SHA-256 + pepper hashing · explicit consent · RBAC · audit logging · data minimization · standardized units · patient code <code>TWC-####</code>.</div>
-          </div>
-        </div>
-        <div class="gas-tabs" id="gasTabs"></div>
-        <div class="gas-layout">
-          <div class="gas-filelist" id="gasFileList"></div>
-          <div class="card gas-codecard">
-            <div class="gas-code-head">
-              <div class="gas-code-meta">
-                <span class="ico-primary">&lt;/&gt;</span>
-                <span class="gas-code-name" id="gasCodeName">—</span>
-                <span class="badge-outline" id="gasCodeGroup">—</span>
-              </div>
-              <div class="gas-code-actions">
-                <button class="btn btn-ghost btn-sm" id="gasCopyBtn">⧉ Copy</button>
-                <button class="btn btn-ghost btn-sm" id="gasDownloadBtn">↓ Download</button>
-              </div>
-            </div>
-            <pre class="gas-code-body"><code id="gasCodeBody">—</code></pre>
-          </div>
-        </div>
-        <div class="grid-2">
-          <div class="card form-card">
-            <div class="card-title-sm"><span class="ico-primary">☁</span> Option A — All-in-GAS</div>
-            <ol class="quickstart">
-              <li><span class="qs-num">1</span>Google Sheet → Extensions → Apps Script</li>
-              <li><span class="qs-num">2</span>Paste 6 files (Code.gs + 5 HTML/JSON)</li>
-              <li><span class="qs-num">3</span>Set Script Properties (SHEET_ID, GEMINI_API_KEY, AUTH_PEPPER)</li>
-              <li><span class="qs-num">4</span>Run initializeSheets_() then seedSuperAdmin_()</li>
-              <li><span class="qs-num">5</span>Deploy → Web App (Me / Anyone) → copy URL</li>
-            </ol>
-          </div>
-          <div class="card form-card">
-            <div class="card-title-sm"><span class="ico-primary">⌥</span> Option B — GAS API + GitHub Pages</div>
-            <ol class="quickstart">
-              <li><span class="qs-num">1</span>script.google.com → New project → paste api/Code.gs</li>
-              <li><span class="qs-num">2</span>Set Script Properties + enable Gmail API</li>
-              <li><span class="qs-num">3</span>Deploy → Web App (Me / Anyone) → copy /exec URL</li>
-              <li><span class="qs-num">4</span>Push github-pages/* to a GitHub repo, set &lt;meta gas-api-url&gt; to the /exec URL</li>
-              <li><span class="qs-num">5</span>Repo Settings → Pages → main branch → live!</li>
-            </ol>
-          </div>
-        </div>
-        <div class="compliance-banner">
-          <span class="compliance-ico">⇄</span>
-          <div>
-            <span class="compliance-title">CORS note for Option B:</span>
-            <span class="compliance-sub">GAS can't answer a CORS preflight (OPTIONS), so the frontend POSTs with <code>Content-Type: text/plain</code> and the JSON in the body — <code>app.js</code> already does this. Don't change it to <code>application/json</code>.</span>
-          </div>
-        </div>
-      </section>
-
+      <!-- Generic error state -->
+      <div id="errorView" class="state hidden">
+        <div class="icon">⚠️</div>
+        <div class="title" id="errTitle">Something went wrong</div>
+        <div class="msg" id="errMsg"></div>
+        <button class="btn btn-secondary mt-4" onclick="window.location.reload()">Reload</button>
+      </div>
     </main>
   </div>
 
-  <!-- BOTTOM TAB BAR (mobile, <1024px) -->
+  <!-- BOTTOM TAB BAR (mobile) — tabs injected per role -->
   <nav class="app-tabbar" id="tabbar"></nav>
-
-  <!-- FOOTER (sticky) -->
-  <footer class="app-footer">
-    TWC Outreach Tracker · PWA demo · GAS deployment source available in-app
-  </footer>
-</div>
-
-<!-- =====================================================================
-     CONTACTLESS VITALS TOOL — fullscreen overlay
-     ===================================================================== -->
-<div id="rppgOverlay" class="overlay hidden">
-  <div class="overlay-head overlay-head-green">
-    <div class="overlay-head-left">
-      <span class="overlay-ico">💓</span>
-      <span class="overlay-title">Contactless Vitals</span>
-      <span class="overlay-pill pill-green">Fullscreen</span>
-    </div>
-    <div class="overlay-head-right">
-      <button class="icon-btn" id="rppgMaxBtn" title="Fullscreen">⛶</button>
-      <button class="icon-btn" id="rppgCloseBtn" aria-label="Close">✕</button>
-    </div>
-  </div>
-  <div class="overlay-body" id="rppgBody"></div>
-  <div class="overlay-foot">Contactless screening · not a medical device · validate BP with a calibrated cuff</div>
 </div>
 
 <!-- =====================================================================
      VISUAL ACUITY TOOL — fullscreen overlay
      ===================================================================== -->
-<div id="vaOverlay" class="overlay hidden">
-  <div class="overlay-head overlay-head-green">
-    <div class="overlay-head-left">
-      <span class="overlay-ico">👁</span>
-      <span class="overlay-title" id="vaHeadTitle">Visual Acuity — Right Eye (OD)</span>
-      <span class="overlay-pill pill-green">Fullscreen</span>
-    </div>
-    <div class="overlay-head-right">
-      <button class="icon-btn" id="vaMaxBtn" title="Fullscreen">⛶</button>
-      <button class="icon-btn" id="vaCloseBtn" aria-label="Close">✕</button>
-    </div>
+<div id="vaOverlay" class="va-overlay">
+  <div class="va-topbar">
+    <div class="title">Visual Acuity Tool</div>
+    <button class="close" id="vaClose" aria-label="Close">&times;</button>
   </div>
-  <div class="overlay-body" id="vaBody"></div>
-  <div class="overlay-foot va-foot-controls">
-    <div class="va-eye-switch">
-      <button class="va-eye-btn active" id="vaEyeRight">Right</button>
-      <button class="va-eye-btn" id="vaEyeLeft">Left</button>
+  <div class="va-stage" id="vaStage">
+    <!-- Chart rows are injected as buttons -->
+    <div class="va-chart-wrap" id="vaChart"></div>
+    <!-- Live front-camera preview (top-right) -->
+    <video id="vaVideo" class="va-video hidden" autoplay muted playsinline></video>
+    <canvas id="vaCanvas" class="hidden" width="160" height="120"></canvas>
+    <div class="va-distance" id="vaDistance">Distance: — m</div>
+  </div>
+  <div class="va-controls">
+    <div class="info" id="vaInfo">
+      Cover your LEFT eye. Tap the smallest line you can read. The tool will calculate decimal acuity.
     </div>
-    <div class="va-foot-actions">
-      <button class="btn btn-ghost btn-sm" id="vaRestartBtn">↻ Restart cam</button>
-      <button class="btn btn-primary btn-sm" id="vaDoneBtn">✓ Done</button>
-    </div>
+    <button class="btn btn-sm" id="vaCalibrateBtn">Calibrate Distance (Card)</button>
+    <button class="btn btn-sm" id="vaCameraBtn">Toggle Camera</button>
+    <button class="btn btn-sm" id="vaConfirmBtn">Confirm Selection</button>
   </div>
 </div>
 
 <!-- =====================================================================
-     AI DENTAL SCAN TOOL — fullscreen overlay
-     ===================================================================== -->
-<div id="dentalOverlay" class="overlay hidden">
-  <div class="overlay-head overlay-head-rose">
-    <div class="overlay-head-left">
-      <span class="overlay-ico">😁</span>
-      <span class="overlay-title">AI Dental Scan</span>
-      <span class="overlay-pill pill-rose">Fullscreen</span>
-    </div>
-    <div class="overlay-head-right">
-      <button class="icon-btn" id="dentalMaxBtn" title="Fullscreen">⛶</button>
-      <button class="icon-btn" id="dentalCloseBtn" aria-label="Close">✕</button>
-    </div>
-  </div>
-  <div class="overlay-body" id="dentalBody"></div>
-  <div class="overlay-foot">AI dental scan · computer vision + HSV colour analysis · screening grade, not a clinical exam</div>
-</div>
-
-<!-- =====================================================================
-     REFERRAL SLIP PRINT CONTAINER
+     REFERRAL SLIP PRINT CONTAINER (overlay, shown when slip generated)
      ===================================================================== -->
 <div id="referralPrintHost"></div>
 
 <!-- =====================================================================
-     CONFIRM DIALOG HOST (for demo data management)
+     PWA INSTALL PROMPT
      ===================================================================== -->
-<div id="confirmHost"></div>
+<div id="pwaInstall" class="pwa-install">
+  <div class="ico">⬇️</div>
+  <div class="text">
+    <strong>Install TWC Tracker</strong>
+    Add to your home screen for offline access.
+  </div>
+  <button class="btn btn-sm btn-primary" id="pwaInstallBtn">Install</button>
+  <button class="btn btn-sm btn-ghost" id="pwaDismiss" style="color:#fff;">Later</button>
+</div>
 
 <!-- =====================================================================
      TOAST HOST
@@ -712,18 +508,9 @@
 <div class="toast-wrap" id="toastWrap"></div>
 
 <!-- =====================================================================
-     PWA INSTALL PROMPT
+     Client logic — vanilla JS, no frameworks.
+     Loaded as a plain external file (NOT via HtmlService include).
      ===================================================================== -->
-<div id="pwaInstall" class="pwa-install hidden">
-  <div class="pwa-ico">⬇️</div>
-  <div class="pwa-text">
-    <strong>Install TWC Tracker</strong>
-    Add to your home screen for offline access.
-  </div>
-  <button class="btn btn-primary btn-sm" id="pwaInstallBtn">Install</button>
-  <button class="btn btn-ghost btn-sm" id="pwaDismiss">Later</button>
-</div>
-
 <script src="./app.js" defer></script>
 </body>
 </html>
