@@ -1,0 +1,68 @@
+{
+  "name": "TWC Outreach Tracker",
+  "short_name": "TWC",
+  "description": "Healthcare community outreach data-capture PWA by TWC Labs. NDPA & NDHA compliant.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#077187",
+  "background_color": "#077187",
+  "lang": "en",
+  "dir": "auto",
+  "categories": ["health", "medical", "productivity"],
+
+  "_icons_note": "DEPLOYER: add icon-192.png and icon-512.png to this folder (same directory as manifest.json). They are referenced below by relative path. Until you add them, the install prompt will fall back to the inline SVG data-URI icons defined as the last two entries.",
+
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%23077187'/><rect x='86' y='40' width='20' height='112' fill='%23fff' rx='4'/><rect x='40' y='86' width='112' height='20' fill='%23fff' rx='4'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='80' fill='%23077187'/><rect x='232' y='110' width='48' height='292' fill='%23fff' rx='8'/><rect x='110' y='232' width='292' height='48' fill='%23fff' rx='8'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+
+  "shortcuts": [
+    {
+      "name": "Register Patient",
+      "short_name": "Register",
+      "description": "Quick register a new patient for an active outreach",
+      "url": "./?view=registration"
+    },
+    {
+      "name": "Patient Queue",
+      "short_name": "Queue",
+      "description": "Open the patient queue for your role",
+      "url": "./?view=queue"
+    }
+  ],
+
+  "display_override": ["standalone", "minimal-ui"],
+  "id": "/",
+  "prefer_related_applications": false
+}
